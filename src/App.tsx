@@ -15,7 +15,8 @@ import {
   Truck,
   Car,
   AlertTriangle,
-  Plus
+  Plus,
+  LayoutDashboard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTracking } from './hooks/useTracking';
@@ -71,8 +72,23 @@ const LiveMap = () => {
 };
 
 // Sidebar Component
-const Sidebar = () => {
-  const [activeTab, setActiveTab] = useState('monitor');
+const Sidebar = ({ 
+  fetchProfile, 
+  isLoggedIn, 
+  userProfile, 
+  activeTab, 
+  setActiveTab, 
+  showAssetList, 
+  setShowAssetList 
+}: { 
+  fetchProfile: () => void, 
+  isLoggedIn: boolean, 
+  userProfile: any,
+  activeTab: string,
+  setActiveTab: (t: string) => void,
+  showAssetList: boolean,
+  setShowAssetList: (v: boolean) => void
+}) => {
   const { devices, setDevices } = useDeviceStore();
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -84,6 +100,20 @@ const Sidebar = () => {
     { id: 'reports', icon: Activity, label: 'Reports' },
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];
+
+  const handleTabClick = (tabId: string) => {
+    if (tabId === 'monitor') {
+      if (activeTab === 'monitor') {
+        setShowAssetList(!showAssetList);
+      } else {
+        setActiveTab('monitor');
+        setShowAssetList(true);
+      }
+    } else {
+      setActiveTab(tabId);
+      setShowAssetList(false);
+    }
+  };
 
   const handleAddDevice = async (e: any) => {
     e.preventDefault();
@@ -115,31 +145,13 @@ const Sidebar = () => {
   };
 
   return (
-    <aside className="w-80 h-full bg-[#1a1a1a] border-r border-white/5 flex flex-col">
+    <aside className="w-64 h-full bg-[#1a1a1a] border-r border-white/5 flex flex-col shrink-0">
       <div className="p-6 border-bottom border-white/5 bg-[#141414]">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
             <Activity className="text-white" size={20} />
           </div>
           <h1 className="font-sans font-bold text-lg text-white tracking-tight">FleetPulse<span className="text-blue-500">Pro</span></h1>
-        </div>
-        
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search assets..." 
-              className="w-full bg-white/5 border border-white/10 rounded-md py-2 pl-10 pr-4 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500/50 transition-colors"
-            />
-          </div>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            title="Add Device"
-            className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-md transition-colors flex items-center justify-center shrink-0"
-          >
-            <Plus size={18} />
-          </button>
         </div>
       </div>
 
@@ -148,7 +160,7 @@ const Sidebar = () => {
         {menuItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => handleTabClick(item.id)}
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all relative group",
               activeTab === item.id 
@@ -163,65 +175,15 @@ const Sidebar = () => {
 
         <div className="pt-8">
           <div className="flex items-center justify-between px-3 mb-2">
-            <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Asset List</p>
-            <button 
-              onClick={async () => {
-                const demoDevice = {
-                  imei: 'DEMO-' + Math.random().toString(36).substr(2, 5),
-                  name: 'Demo Truck',
-                  plateNumber: 'T ' + Math.floor(100 + Math.random() * 900) + ' DEMO',
-                  vehicleType: 'TRUCK'
-                };
-                await fetch('/api/devices', {
-                  method: 'POST',
-                  headers: { 
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                  },
-                  body: JSON.stringify(demoDevice),
-                });
-                const response = await fetch('/api/devices', {
-                  headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                if (response.ok) setDevices(await response.json());
-              }}
-              className="text-[9px] text-blue-500 hover:text-blue-400 font-bold uppercase"
-            >
-              + Seed Demo
-            </button>
+            <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Actions</p>
           </div>
-          {devices.map((device) => (
-            <button 
-              key={device.id} 
-              onClick={() => useDeviceStore.getState().selectDevice(device.id)}
-              className={cn(
-                "w-full text-left px-3 py-2 text-xs rounded transition-colors flex items-center justify-between group",
-                useDeviceStore.getState().selectedDeviceId === device.id 
-                  ? "bg-blue-600/20 text-blue-400 border border-blue-600/20" 
-                  : "text-white/40 hover:text-white hover:bg-white/5"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <div className={cn("w-1.5 h-1.5 rounded-full", 
-                  device.status === 'MOVING' ? 'bg-green-500' : 
-                  device.status === 'IDLE' ? 'bg-yellow-500' : 'bg-red-500')} 
-                />
-                <span className="font-mono">{device.plateNumber}</span>
-              </div>
-              <span className="text-[9px] text-white/20 group-hover:text-white/40 uppercase font-bold">{device.status}</span>
-            </button>
-          ))}
-          {devices.length === 0 && (
-            <div className="px-3 py-6 text-center border border-dashed border-white/5 rounded-lg mx-2 mt-2">
-              <p className="text-[10px] text-white/20 italic mb-3">No devices added yet</p>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="text-[10px] bg-blue-600/10 text-blue-400 border border-blue-600/20 px-3 py-1.5 rounded hover:bg-blue-600/20 transition-all font-bold uppercase"
-              >
-                Register First Asset
-              </button>
-            </div>
-          )}
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-[10px] text-blue-500 hover:bg-blue-600/10 transition-colors uppercase font-bold"
+          >
+            <Plus size={14} />
+            Add New Asset
+          </button>
         </div>
       </nav>
 
@@ -273,15 +235,27 @@ const Sidebar = () => {
       </AnimatePresence>
 
       <div className="p-4 border-t border-white/5 bg-[#141414]">
-        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group">
+        <div 
+          onClick={fetchProfile}
+          className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group"
+        >
           <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
             <User size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">Saveg Admin</p>
+            <p className="text-sm font-medium text-white truncate">{isLoggedIn && userProfile ? userProfile.name : "Saveg Admin"}</p>
             <p className="text-[10px] text-white/30 uppercase">Premium Member</p>
           </div>
-          <LogOut className="text-white/20 group-hover:text-red-400 transition-colors" size={16} />
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              localStorage.removeItem('token');
+              window.location.reload();
+            }}
+            className="hover:bg-red-500/10 p-1.5 rounded-md transition-colors"
+          >
+            <LogOut className="text-white/20 group-hover:text-red-400 transition-colors" size={16} />
+          </button>
         </div>
       </div>
     </aside>
@@ -295,6 +269,10 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState('monitor');
+  const [showAssetList, setShowAssetList] = useState(true);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const { devices, selectedDeviceId, selectDevice, setDevices } = useDeviceStore();
   const selectedDevice = devices.find(d => d.id === selectedDeviceId);
@@ -319,6 +297,21 @@ export default function App() {
       }
     } catch (error) {
       console.error('Fetch devices error:', error);
+    }
+  };
+
+  const fetchProfile = async () => {
+    try {
+      const response = await fetch('/api/profile', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUserProfile(data);
+        setShowProfileModal(true);
+      }
+    } catch (error) {
+      console.error('Fetch profile error:', error);
     }
   };
 
@@ -482,51 +475,189 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-[#141414] text-white font-sans flex overflow-hidden">
-      <Sidebar />
+      <Sidebar 
+        fetchProfile={fetchProfile} 
+        isLoggedIn={isLoggedIn} 
+        userProfile={userProfile} 
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        showAssetList={showAssetList} 
+        setShowAssetList={setShowAssetList} 
+      />
       
-      <main className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <header className="h-16 border-bottom border-white/5 bg-[#1a1a1a] px-8 flex items-center justify-between z-10 shrink-0">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-xs font-mono font-bold">SYSTEM STABLE</span>
-            </div>
-            
-            <div className="h-8 w-px bg-white/10" />
-            
-            <div className="flex items-center gap-6">
-              {[
-                { icon: Truck, label: 'TOTAL', value: devices.length.toString() },
-                { icon: Gauge, label: 'ONLINE', value: devices.filter(d => d.status !== 'OFFLINE').length.toString() },
-                { icon: Fuel, label: 'MOVING', value: devices.filter(d => d.status === 'MOVING').length.toString() },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <item.icon className="text-white/30" size={16} />
-                  <div>
-                    <p className="text-[8px] text-white/30 font-bold uppercase leading-none mb-0.5">{item.label}</p>
-                    <p className="text-xs font-mono font-bold leading-none">{item.value}</p>
+      <AnimatePresence>
+        {showProfileModal && userProfile && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-[#000]/80 backdrop-blur-sm z-[2000] flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-md bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setShowProfileModal(false)}
+                className="absolute top-4 right-4 text-white/30 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+
+              <div className="flex flex-col items-center mb-8">
+                <div className="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center text-blue-400 mb-4 border-4 border-blue-600/10">
+                  <User size={40} />
+                </div>
+                <h2 className="text-white font-bold text-xl">{userProfile.name}</h2>
+                <p className="text-xs text-white/30 uppercase font-bold tracking-widest mt-1">{userProfile.role}</p>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2 px-1">Email Details</label>
+                  <div className="bg-white/5 border border-white/10 rounded-lg p-4 text-sm text-white font-mono break-all italic">
+                    {userProfile.email}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="flex items-center gap-4">
-            <button className="p-2 text-white/50 hover:text-white transition-colors relative">
-              <Bell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-[#1a1a1a]" />
-            </button>
-            <div className="bg-yellow-500/10 text-yellow-500 px-3 py-1.5 rounded flex items-center gap-2 border border-yellow-500/20">
-              <span className="text-[10px] font-bold uppercase">Mi Coins</span>
-              <span className="font-mono font-bold text-xs">1,240.50</span>
-            </div>
-          </div>
-        </header>
+                <div>
+                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-widest mb-2 px-1">Account & Security</label>
+                  <div className="bg-white/5 border border-white/10 rounded-lg divide-y divide-white/5 overflow-hidden">
+                    <div className="p-4 flex justify-between items-center bg-blue-400/5">
+                      <span className="text-xs text-white/50 uppercase">Password Status</span>
+                      <span className="text-[10px] font-mono bg-green-500/20 text-green-400 px-2 py-1 rounded">ENCRYPTED</span>
+                    </div>
+                    <div className="p-4 flex justify-between items-center">
+                      <span className="text-xs text-white/50 uppercase">User ID</span>
+                      <span className="text-[9px] font-mono text-white/30 truncate max-w-[150px]">{userProfile.id}</span>
+                    </div>
+                    <div className="p-4 flex justify-between items-center">
+                      <span className="text-xs text-white/50 uppercase">Password (Stored)</span>
+                      <span className="text-xs font-mono text-blue-400 font-bold">••••••••••••</span>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-white/20 mt-3 italic text-center px-4">
+                    Security Policy: Kwa sababu za usalama, password zako zimewekwa kwenye mfumo uliofungwa (encrypted). Hata admin haziwezi kuona password yako halisi bila ruhusa yako.
+                  </p>
+                </div>
 
-        {/* Content Area */}
-        <div className="flex-1 min-h-0 relative">
-          <LiveMap />
+                <button 
+                  onClick={() => setShowProfileModal(false)}
+                  className="w-full bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold py-3.5 rounded-lg transition-all active:scale-[0.98] mt-4"
+                >
+                  Close Profile
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <main className="flex-1 flex min-w-0 relative">
+        <AnimatePresence mode="wait">
+          {activeTab === 'monitor' && showAssetList && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              className="h-full bg-[#1a1a1a] border-r border-white/5 z-10 overflow-hidden flex flex-col shrink-0"
+            >
+              <div className="p-4 border-b border-white/5 flex items-center justify-between bg-[#141414]">
+                <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Asset Fleet</span>
+                <div className="flex gap-2">
+                   <Search size={14} className="text-white/20" />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {devices.map((device) => (
+                  <button 
+                    key={device.id} 
+                    onClick={() => selectDevice(device.id)}
+                    className={cn(
+                      "w-full text-left px-4 py-3 border-b border-white/[0.03] transition-all flex flex-col gap-1 group",
+                      selectedDeviceId === device.id 
+                        ? "bg-blue-600/10 border-l-2 border-l-blue-500" 
+                        : "hover:bg-white/[0.02]"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold font-mono tracking-tight text-white/90">{device.plateNumber}</span>
+                      <div className={cn("w-2 h-2 rounded-full",
+                        device.status === 'MOVING' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 
+                        device.status === 'IDLE' ? 'bg-yellow-500' : 'bg-red-500'
+                      )} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-white/20 uppercase font-medium">{device.status}</p>
+                      <p className="text-[10px] text-white/40 font-mono italic">{device.lastPosition?.speed.toFixed(0) || 0} km/h</p>
+                    </div>
+                  </button>
+                ))}
+                
+                {devices.length === 0 && (
+                  <div className="p-8 text-center">
+                    <p className="text-xs text-white/20 italic">No assets connected</p>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top Header */}
+          <header className="h-16 border-bottom border-white/5 bg-[#1a1a1a] px-8 flex items-center justify-between z-10 shrink-0">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-xs font-mono font-bold">SYSTEM STABLE</span>
+              </div>
+              
+              <div className="h-8 w-px bg-white/10" />
+              
+              <div className="flex items-center gap-6">
+                {[
+                  { icon: Truck, label: 'TOTAL', value: devices.length.toString() },
+                  { icon: Gauge, label: 'ONLINE', value: devices.filter(d => d.status !== 'OFFLINE').length.toString() },
+                  { icon: Fuel, label: 'MOVING', value: devices.filter(d => d.status === 'MOVING').length.toString() },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-2">
+                    <item.icon className="text-white/30" size={16} />
+                    <div>
+                      <p className="text-[8px] text-white/30 font-bold uppercase leading-none mb-0.5">{item.label}</p>
+                      <p className="text-xs font-mono font-bold leading-none">{item.value}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setShowAssetList(!showAssetList)}
+                className={cn("p-2 rounded-md transition-all", showAssetList ? "bg-blue-600/20 text-blue-400" : "text-white/40 hover:text-white")}
+                title={showAssetList ? "Hide Asset List" : "Show Asset List"}
+              >
+                <LayoutDashboard size={18} />
+              </button>
+              <button className="p-2 text-white/50 hover:text-white transition-colors relative">
+                <Bell size={20} />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-[#1a1a1a]" />
+              </button>
+              <div className="bg-yellow-500/10 text-yellow-500 px-3 py-1.5 rounded flex items-center gap-2 border border-yellow-500/20">
+                <span className="text-[10px] font-bold uppercase">Mi Coins</span>
+                <span className="font-mono font-bold text-xs">1,240.50</span>
+              </div>
+            </div>
+          </header>
+
+          {/* Content Area */}
+          <div className="flex-1 min-h-0 relative">
+            <LiveMap />
+          </div>
         </div>
       </main>
 

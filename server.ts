@@ -103,6 +103,29 @@ async function startServer() {
     }
   });
 
+  app.get("/api/profile", authenticateToken, async (req: any, res) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        include: { tenant: true }
+      });
+      if (!user) return res.status(404).json({ error: "User not found" });
+      
+      // Return user details. Password is hashed, so we don't return it for security.
+      // But we will send a hint that it exists.
+      res.json({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        tenant: user.tenant.name,
+        createdAt: user.createdAt
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+
   // --- DEVICE MANAGEMENT ---
   app.get("/api/devices", authenticateToken, async (req: any, res) => {
     try {
