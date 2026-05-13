@@ -273,6 +273,8 @@ export default function App() {
   const [showAssetList, setShowAssetList] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const { devices, selectedDeviceId, selectDevice, setDevices } = useDeviceStore();
   const selectedDevice = devices.find(d => d.id === selectedDeviceId);
@@ -309,9 +311,41 @@ export default function App() {
         const data = await response.json();
         setUserProfile(data);
         setShowProfileModal(true);
+        setNewPassword(''); // Reset password field
       }
     } catch (error) {
       console.error('Fetch profile error:', error);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      alert("Nywila lazima iwe angalau na herufi 6.");
+      return;
+    }
+    
+    setIsUpdatingPassword(true);
+    try {
+      const response = await fetch('/api/profile/password', {
+        method: 'PATCH',
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ newPassword })
+      });
+      
+      if (response.ok) {
+        alert("Nywila imebadilishwa kikamilifu!");
+        setNewPassword('');
+      } else {
+        const data = await response.json();
+        alert(data.error || "Imeshindwa kubadili nywila.");
+      }
+    } catch (error) {
+      alert("Hitilafu ya mtandao.");
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -538,8 +572,28 @@ export default function App() {
                       <span className="text-xs font-mono text-blue-400 font-bold">••••••••••••</span>
                     </div>
                   </div>
-                  <p className="text-[9px] text-white/20 mt-3 italic text-center px-4">
-                    Security Policy: Kwa sababu za usalama, password zako zimewekwa kwenye mfumo uliofungwa (encrypted). Hata admin haziwezi kuona password yako halisi bila ruhusa yako.
+                </div>
+
+                <div className="bg-blue-600/5 border border-blue-500/20 rounded-xl p-5">
+                  <label className="block text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-3">Tengeneza Nywila Mpya (Reset)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Weka nywila mpya hapa..."
+                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                    <button 
+                      onClick={handleUpdatePassword}
+                      disabled={isUpdatingPassword}
+                      className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all"
+                    >
+                      {isUpdatingPassword ? "..." : "RESET"}
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-white/30 mt-2 italic px-1">
+                    * Huulizwi nywila ya zamani. Ukibonyeza RESET, nywila yako mpya itakuwa hiyo uliyoweka hapo juu.
                   </p>
                 </div>
 

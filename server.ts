@@ -31,258 +31,277 @@ const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
-async function startServer() {
-  const app = express();
-  const server = http.createServer(app);
-  const io = new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
-  });
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-  app.use(express.json());
+app.use(express.json());
 
-  // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "healthy", version: "1.0.0" });
-  });
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "healthy", version: "1.0.0" });
+});
 
-  // --- AUTH MODULE ---
-  app.post("/api/auth/register", async (req, res) => {
-    try {
-      const { email, password, name, tenantName } = req.body;
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      // Create Tenant and User Transactionally
-      const result = await prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({
-          data: { name: tenantName || `${name}'s Fleet` }
-        });
-
-        const user = await tx.user.create({
-          data: {
-            email,
-            password: hashedPassword,
-            name,
-            role: "COMPANY_ADMIN",
-            tenantId: tenant.id
-          }
-        });
-        return { user, tenant };
+// --- AUTH MODULE ---
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { email, password, name, tenantName } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create Tenant and User Transactionally
+    const result = await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: { name: tenantName || `${name}'s Fleet` }
       });
 
-      res.status(201).json({ message: "User registered successfully", tenantId: result.tenant.id });
-    } catch (error: any) {
-      console.error("Reg Error:", error);
-      let message = "Registration failed";
-      if (error.code === 'P2002') {
-        message = "Email already registered";
-      }
-      res.status(500).json({ error: message, detail: error.message });
-    }
-  });
-
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      const user = await prisma.user.findUnique({
-        where: { email },
-        include: { tenant: true }
-      });
-
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      const token = jwt.sign({ id: user.id, role: user.role, tenantId: user.tenantId }, JWT_SECRET, { expiresIn: '24h' });
-      res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, tenant: user.tenant } });
-    } catch (error: any) {
-      console.error("Login Error:", error);
-      res.status(500).json({ error: "Login failed", detail: error.message });
-    }
-  });
-
-  app.get("/api/profile", authenticateToken, async (req: any, res) => {
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        include: { tenant: true }
-      });
-      if (!user) return res.status(404).json({ error: "User not found" });
-      
-      // Return user details. Password is hashed, so we don't return it for security.
-      // But we will send a hint that it exists.
-      res.json({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        tenant: user.tenant.name,
-        createdAt: user.createdAt
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch profile" });
-    }
-  });
-
-  // --- DEVICE MANAGEMENT ---
-  app.get("/api/devices", authenticateToken, async (req: any, res) => {
-    try {
-      const devices = await prisma.device.findMany({
-        where: { tenantId: req.user.tenantId },
-        include: { vehicle: true }
-      });
-      res.json(devices);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch devices" });
-    }
-  });
-
-  app.post("/api/devices", authenticateToken, async (req: any, res) => {
-    try {
-      const { imei, name, plateNumber, vehicleType } = req.body;
-      const device = await prisma.device.create({
+      const user = await tx.user.create({
         data: {
-          imei,
+          email,
+          password: hashedPassword,
           name,
-          tenantId: req.user.tenantId,
-          vehicle: {
-            create: {
-              plateNumber,
-              type: vehicleType || "TRUCK"
-            }
-          }
-        },
-        include: { vehicle: true }
+          role: "COMPANY_ADMIN",
+          tenantId: tenant.id
+        }
       });
-      res.status(201).json(device);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || "Failed to create device" });
-    }
-  });
-
-  app.delete("/api/devices/:id", authenticateToken, async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      console.log(`Trace: Deleting device ${id} for tenant ${req.user.tenantId}`);
-      
-      const device = await prisma.device.findFirst({
-        where: { id, tenantId: req.user.tenantId }
-      });
-
-      if (!device) {
-        console.warn(`Trace: Device ${id} not found or not owned by tenant ${req.user.tenantId}`);
-        return res.status(404).json({ error: "Kifaa hakijapatikana au huna mamlaka." });
-      }
-
-      await prisma.device.delete({
-        where: { id }
-      });
-
-      console.log(`Trace: Device ${id} deleted successfully`);
-      res.json({ message: "Kifaa kimefutwa." });
-    } catch (error: any) {
-      console.error("Trace: Delete Error:", error);
-      res.status(500).json({ error: "Seva imeshindwa kufuta kifaa. Huenda kuna data zimefungwa.", detail: error.message });
-    }
-  });
-
-  // --- GPS INGESTION ---
-  app.post("/api/gps/ingest", async (req, res) => {
-    const gpsSchema = z.object({
-      imei: z.string(),
-      lat: z.number(),
-      lng: z.number(),
-      speed: z.number(),
-      heading: z.number(),
-      altitude: z.number().optional(),
-      timestamp: z.string().optional()
+      return { user, tenant };
     });
 
-    const result = gpsSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json({ error: "Invalid GPS data" });
+    res.status(201).json({ message: "User registered successfully", tenantId: result.tenant.id });
+  } catch (error: any) {
+    console.error("Reg Error:", error);
+    let message = "Registration failed";
+    if (error.code === 'P2002') {
+      message = "Email already registered";
+    }
+    res.status(500).json({ error: message, detail: error.message });
+  }
+});
 
-    const { imei, lat, lng, speed, heading, timestamp } = result.data;
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { tenant: true }
+    });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign({ id: user.id, role: user.role, tenantId: user.tenantId }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, tenant: user.tenant } });
+  } catch (error: any) {
+    console.error("Login Error:", error);
+    res.status(500).json({ error: "Login failed", detail: error.message });
+  }
+});
+
+app.get("/api/profile", authenticateToken, async (req: any, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      include: { tenant: true }
+    });
+    if (!user) return res.status(404).json({ error: "User not found" });
     
-    try {
-      // Find device to update status
-      const device = await prisma.device.findUnique({ where: { imei } });
-      if (!device) return res.status(404).json({ error: "Device not found" });
+    // Return user details. Password is hashed, so we don't return it for security.
+    // But we will send a hint that it exists.
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      tenant: user.tenant.name,
+      createdAt: user.createdAt
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
 
-      const posUpdate = {
-        lastPositionLat: lat,
-        lastPositionLng: lng,
-        lastSpeed: speed,
-        lastHeading: heading,
-        lastSeen: new Date(),
-        status: (speed > 5 ? "MOVING" : (speed === 0 ? "IDLE" : "OFFLINE")) as any
-      };
-
-      await prisma.device.update({
-        where: { imei },
-        data: posUpdate
-      });
-
-      // Log to Position History
-      await prisma.position.create({
-        data: {
-          deviceId: device.id,
-          lat,
-          lng,
-          speed,
-          heading,
-          timestamp: timestamp ? new Date(timestamp) : new Date()
-        }
-      });
-
-      io.emit("position:update", { imei, lat, lng, speed, heading, timestamp, status: posUpdate.status });
-      res.status(200).json({ status: "ok" });
-    } catch (error) {
-      console.error("Ingest Error:", error);
-      res.status(500).json({ error: "Ingestion failed" });
+app.patch("/api/profile/password", authenticateToken, async (req: any, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
-  });
 
-  // --- COMMANDS ---
-  app.post("/api/commands", authenticateToken, async (req: any, res) => {
-    try {
-      const { deviceId, type, payload } = req.body;
-      
-      const command = await prisma.command.create({
-        data: {
-          deviceId,
-          type,
-          payload: payload || {},
-          status: "PENDING"
-        }
-      });
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { password: hashedPassword }
+    });
 
-      // In a real system, you would send this to the tracker via GPRS/SMS
-      // For demo, we just simulate success after 2 seconds
-      setTimeout(async () => {
-        await prisma.command.update({
-          where: { id: command.id },
-          data: { 
-            status: "EXECUTED",
-            executedAt: new Date()
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update password" });
+  }
+});
+
+// --- DEVICE MANAGEMENT ---
+app.get("/api/devices", authenticateToken, async (req: any, res) => {
+  try {
+    const devices = await prisma.device.findMany({
+      where: { tenantId: req.user.tenantId },
+      include: { vehicle: true }
+    });
+    res.json(devices);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch devices" });
+  }
+});
+
+app.post("/api/devices", authenticateToken, async (req: any, res) => {
+  try {
+    const { imei, name, plateNumber, vehicleType } = req.body;
+    const device = await prisma.device.create({
+      data: {
+        imei,
+        name,
+        tenantId: req.user.tenantId,
+        vehicle: {
+          create: {
+            plateNumber,
+            type: vehicleType || "TRUCK"
           }
-        });
-        io.emit("command:executed", { deviceId, type, commandId: command.id });
-      }, 2000);
+        }
+      },
+      include: { vehicle: true }
+    });
+    res.status(201).json(device);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Failed to create device" });
+  }
+});
 
-      res.status(202).json({ message: "Command queued", commandId: command.id });
-    } catch (error) {
-      res.status(500).json({ error: "Command failed" });
+app.delete("/api/devices/:id", authenticateToken, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`Trace: Deleting device ${id} for tenant ${req.user.tenantId}`);
+    
+    const device = await prisma.device.findFirst({
+      where: { id, tenantId: req.user.tenantId }
+    });
+
+    if (!device) {
+      console.warn(`Trace: Device ${id} not found or not owned by tenant ${req.user.tenantId}`);
+      return res.status(404).json({ error: "Kifaa hakijapatikana au huna mamlaka." });
     }
+
+    await prisma.device.delete({
+      where: { id }
+    });
+
+    console.log(`Trace: Device ${id} deleted successfully`);
+    res.json({ message: "Kifaa kimefutwa." });
+  } catch (error: any) {
+    console.error("Trace: Delete Error:", error);
+    res.status(500).json({ error: "Seva imeshindwa kufuta kifaa. Huenda kuna data zimefungwa.", detail: error.message });
+  }
+});
+
+// --- GPS INGESTION ---
+app.post("/api/gps/ingest", async (req, res) => {
+  const gpsSchema = z.object({
+    imei: z.string(),
+    lat: z.number(),
+    lng: z.number(),
+    speed: z.number(),
+    heading: z.number(),
+    altitude: z.number().optional(),
+    timestamp: z.string().optional()
   });
 
-  // Socket.io
-  io.on("connection", (socket) => {
-    console.log("Trace: Client connected:", socket.id);
-  });
+  const result = gpsSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: "Invalid GPS data" });
 
-  // Vite middleware
+  const { imei, lat, lng, speed, heading, timestamp } = result.data;
+  
+  try {
+    // Find device to update status
+    const device = await prisma.device.findUnique({ where: { imei } });
+    if (!device) return res.status(404).json({ error: "Device not found" });
+
+    const posUpdate = {
+      lastPositionLat: lat,
+      lastPositionLng: lng,
+      lastSpeed: speed,
+      lastHeading: heading,
+      lastSeen: new Date(),
+      status: (speed > 5 ? "MOVING" : (speed === 0 ? "IDLE" : "OFFLINE")) as any
+    };
+
+    await prisma.device.update({
+      where: { imei },
+      data: posUpdate
+    });
+
+    // Log to Position History
+    await prisma.position.create({
+      data: {
+        deviceId: device.id,
+        lat,
+        lng,
+        speed,
+        heading,
+        timestamp: timestamp ? new Date(timestamp) : new Date()
+      }
+    });
+
+    io.emit("position:update", { imei, lat, lng, speed, heading, timestamp, status: posUpdate.status });
+    res.status(200).json({ status: "ok" });
+  } catch (error) {
+    console.error("Ingest Error:", error);
+    res.status(500).json({ error: "Ingestion failed" });
+  }
+});
+
+// --- COMMANDS ---
+app.post("/api/commands", authenticateToken, async (req: any, res) => {
+  try {
+    const { deviceId, type, payload } = req.body;
+    
+    const command = await prisma.command.create({
+      data: {
+        deviceId,
+        type,
+        payload: payload || {},
+        status: "PENDING"
+      }
+    });
+
+    // In a real system, you would send this to the tracker via GPRS/SMS
+    // For demo, we just simulate success after 2 seconds
+    setTimeout(async () => {
+      await prisma.command.update({
+        where: { id: command.id },
+        data: { 
+          status: "EXECUTED",
+          executedAt: new Date()
+        }
+      });
+      io.emit("command:executed", { deviceId, type, commandId: command.id });
+    }, 2000);
+
+    res.status(202).json({ message: "Command queued", commandId: command.id });
+  } catch (error) {
+    res.status(500).json({ error: "Command failed" });
+  }
+});
+
+// Socket.io
+io.on("connection", (socket) => {
+  console.log("Trace: Client connected:", socket.id);
+});
+
+// Vite middleware
+async function setupVite() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -296,7 +315,11 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+}
 
+setupVite();
+
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`FleetPulse Pro Server [Phase 1 Ready] at http://localhost:${PORT}`);
     
@@ -332,4 +355,4 @@ async function startServer() {
   });
 }
 
-startServer();
+export default app;
