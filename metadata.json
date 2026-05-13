@@ -1,0 +1,6 @@
+{
+  "name": "FleetPulse Pro",
+  "description": "A world-class GPS tracking and fleet management platform for enterprise fleet operators.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["GPS Tracking", "Fleet Management", "Real-time Alerts", "Geofencing"]
+}

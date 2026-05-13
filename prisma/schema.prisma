@@ -1,0 +1,217 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  devices     Device[]
+  groups      DeviceGroup[]
+  drivers     Driver[]
+  geofences   Geofence[]
+  subscriptions Subscription[]
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          Role      @default(VIEWER)
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  twoFactorEnabled Boolean @default(false)
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  activityLogs  AuditLog[]
+}
+
+enum Role {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  FLEET_MANAGER
+  DISPATCHER
+  DRIVER
+  VIEWER
+}
+
+model Device {
+  id              String        @id @default(uuid())
+  imei            String        @unique
+  name            String
+  modelName       String?
+  status          DeviceStatus  @default(OFFLINE)
+  lastPositionLat Float?
+  lastPositionLng Float?
+  lastSpeed       Float?
+  lastHeading     Float?
+  lastSeen        DateTime?
+  batteryVoltage  Float?
+  satelliteCount  Int?
+  signalStrength  Int?
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  groupId         String?
+  group           DeviceGroup?  @relation(fields: [groupId], references: [id])
+  vehicle         Vehicle?
+  positions       Position[]
+  alerts          Alert[]
+  commands        Command[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum DeviceStatus {
+  MOVING
+  IDLE
+  OFFLINE
+  PARKED
+}
+
+model Vehicle {
+  id            String   @id @default(uuid())
+  plateNumber   String   @unique
+  type          String
+  brand         String?
+  model         String?
+  year          Int?
+  color         String?
+  photoUrl      String?
+  deviceId      String   @unique
+  device        Device   @relation(fields: [deviceId], references: [id])
+  driverId      String?  @unique
+  driver        Driver?  @relation(fields: [driverId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DeviceGroup {
+  id        String   @id @default(uuid())
+  name      String
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  devices   Device[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Position {
+  id        String   @id @default(uuid())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id])
+  lat       Float
+  lng       Float
+  speed     Float
+  heading   Float
+  altitude  Float?
+  ignition  Boolean  @default(false)
+  timestamp DateTime
+  createdAt DateTime @default(now())
+
+  @@index([deviceId, timestamp])
+}
+
+model Trip {
+  id            String   @id @default(uuid())
+  deviceId      String
+  startTime     DateTime
+  endTime       DateTime?
+  startLat      Float
+  startLng      Float
+  endLat        Float?
+  endLng        Float?
+  distance      Float    @default(0) // km
+  maxSpeed      Float    @default(0)
+  driverId      String?
+  createdAt     DateTime @default(now())
+}
+
+model Alert {
+  id          String   @id @default(uuid())
+  type        String
+  message     String
+  severity    String   @default("INFO")
+  isRead      Boolean  @default(false)
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id])
+  lat         Float?
+  lng         Float?
+  timestamp   DateTime @default(now())
+}
+
+model Geofence {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // CIRCLE, POLYGON, RECTANGLE
+  coordinates Json     // Array of points or {center, radius}
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Driver {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String?
+  licenseNumber String?
+  photoUrl      String?
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  vehicle       Vehicle?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Command {
+  id          String   @id @default(uuid())
+  type        String
+  payload     Json?
+  status      String   @default("PENDING") // PENDING, SENT, EXECUTED, FAILED
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id])
+  sentAt      DateTime?
+  executedAt  DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model MiCoinTransaction {
+  id          String   @id @default(uuid())
+  tenantId    String
+  amount      Float
+  type        String   // CREDIT, DEBIT
+  description String
+  createdAt   DateTime @default(now())
+}
+
+model Subscription {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  status      String    @default("ACTIVE")
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  plan        String
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  details   Json?
+  createdAt DateTime @default(now())
+}

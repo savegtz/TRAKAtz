@@ -1,0 +1,601 @@
+import { useEffect, useState } from 'react';
+import { 
+  Activity, 
+  Map as MapIcon, 
+  Settings, 
+  Bell, 
+  User, 
+  Search, 
+  Filter, 
+  Fuel, 
+  Gauge, 
+  Clock,
+  LogOut,
+  Shield,
+  Truck,
+  Car,
+  AlertTriangle,
+  Plus
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useTracking } from './hooks/useTracking';
+import { useDeviceStore } from './store/useDeviceStore';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+import { Map } from './components/Map';
+
+// Map Component Placeholder - Replaced by real Map
+const LiveMap = () => {
+  const { devices } = useDeviceStore();
+  
+  const moving = devices.filter(d => d.status === 'MOVING').length;
+  const idling = devices.filter(d => d.status === 'IDLE').length;
+  const offline = devices.filter(d => d.status === 'OFFLINE').length;
+
+  return (
+    <div className="w-full h-full bg-[#141414] relative overflow-hidden flex items-center justify-center">
+      <Map />
+      
+      {/* Simulation Overlay for Demo - Now showing real counts */}
+      <AnimatePresence>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute top-8 left-8 bg-[#1a1a1a]/90 border border-white/10 p-4 rounded-lg shadow-2xl backdrop-blur-md z-[1000]"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <h3 className="font-mono text-xs text-white uppercase font-bold">Live Fleet Status</h3>
+          </div>
+          <div className="space-y-3">
+            {[
+              { label: 'Moving', value: moving.toString(), color: 'text-green-500' },
+              { label: 'Idling', value: idling.toString(), color: 'text-yellow-500' },
+              { label: 'Offline', value: offline.toString(), color: 'text-red-500' },
+            ].map((stat) => (
+              <div key={stat.label} className="flex justify-between items-center gap-8">
+                <span className="text-[10px] text-white/50 uppercase">{stat.label}</span>
+                <span className={cn("font-mono text-sm font-bold", stat.color)}>{stat.value}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+};
+
+// Sidebar Component
+const Sidebar = () => {
+  const [activeTab, setActiveTab] = useState('monitor');
+  const { devices, setDevices } = useDeviceStore();
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const menuItems = [
+    { id: 'monitor', icon: MapIcon, label: 'Monitor' },
+    { id: 'tracks', icon: Clock, label: 'Tracks' },
+    { id: 'alerts', icon: AlertTriangle, label: 'Alerts' },
+    { id: 'geofence', icon: Shield, label: 'Geofence' },
+    { id: 'reports', icon: Activity, label: 'Reports' },
+    { id: 'settings', icon: Settings, label: 'Settings' },
+  ];
+
+  const handleAddDevice = async (e: any) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const deviceData = {
+      imei: formData.get('imei'),
+      name: formData.get('name'),
+      plateNumber: formData.get('plateNumber'),
+      vehicleType: formData.get('vehicleType'),
+    };
+
+    try {
+      const response = await fetch('/api/devices', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(deviceData),
+      });
+      if (response.ok) {
+        const newDevice = await response.json();
+        setDevices([...devices, newDevice]);
+        setShowAddModal(false);
+      }
+    } catch (error) {
+      console.error('Failed to add device:', error);
+    }
+  };
+
+  return (
+    <aside className="w-80 h-full bg-[#1a1a1a] border-r border-white/5 flex flex-col">
+      <div className="p-6 border-bottom border-white/5 bg-[#141414]">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
+            <Activity className="text-white" size={20} />
+          </div>
+          <h1 className="font-sans font-bold text-lg text-white tracking-tight">FleetPulse<span className="text-blue-500">Pro</span></h1>
+        </div>
+        
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search assets..." 
+              className="w-full bg-white/5 border border-white/10 rounded-md py-2 pl-10 pr-4 text-xs text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500/50 transition-colors"
+            />
+          </div>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            title="Add Device"
+            className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-md transition-colors flex items-center justify-center shrink-0"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        <p className="text-[10px] font-bold text-white/30 uppercase px-3 mb-2 tracking-widest">Main Menu</p>
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all relative group",
+              activeTab === item.id 
+                ? "bg-blue-600/10 text-blue-400 font-medium" 
+                : "text-white/50 hover:bg-white/5 hover:text-white"
+            )}
+          >
+            <item.icon size={18} />
+            {item.label}
+          </button>
+        ))}
+
+        <div className="pt-8">
+          <div className="flex items-center justify-between px-3 mb-2">
+            <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Asset List</p>
+            <button 
+              onClick={async () => {
+                const demoDevice = {
+                  imei: 'DEMO-' + Math.random().toString(36).substr(2, 5),
+                  name: 'Demo Truck',
+                  plateNumber: 'T ' + Math.floor(100 + Math.random() * 900) + ' DEMO',
+                  vehicleType: 'TRUCK'
+                };
+                await fetch('/api/devices', {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                  },
+                  body: JSON.stringify(demoDevice),
+                });
+                const response = await fetch('/api/devices', {
+                  headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (response.ok) setDevices(await response.json());
+              }}
+              className="text-[9px] text-blue-500 hover:text-blue-400 font-bold uppercase"
+            >
+              + Seed Demo
+            </button>
+          </div>
+          {devices.map((device) => (
+            <button key={device.id} className="w-full text-left px-3 py-2 text-xs text-white/40 hover:text-white hover:bg-white/5 rounded transition-colors flex items-center justify-between group">
+              <div className="flex items-center gap-2">
+                <div className={cn("w-1.5 h-1.5 rounded-full", 
+                  device.status === 'MOVING' ? 'bg-green-500' : 
+                  device.status === 'IDLE' ? 'bg-yellow-500' : 'bg-red-500')} 
+                />
+                <span className="font-mono">{device.plateNumber}</span>
+              </div>
+              <span className="text-[9px] text-white/20 group-hover:text-white/40">{device.status}</span>
+            </button>
+          ))}
+          {devices.length === 0 && (
+            <div className="px-3 py-6 text-center border border-dashed border-white/5 rounded-lg mx-2 mt-2">
+              <p className="text-[10px] text-white/20 italic mb-3">No devices added yet</p>
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="text-[10px] bg-blue-600/10 text-blue-400 border border-blue-600/20 px-3 py-1.5 rounded hover:bg-blue-600/20 transition-all font-bold uppercase"
+              >
+                Register First Asset
+              </button>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      <AnimatePresence>
+        {showAddModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-[#141414]/95 z-50 p-6 flex flex-col justify-center"
+          >
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-white font-bold text-lg">Register New Asset</h2>
+                  <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest">Add tracking device to fleet</p>
+                </div>
+                <button onClick={() => setShowAddModal(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-white/50 hover:bg-white/10 hover:text-white transition-all">✕</button>
+              </div>
+              <form className="space-y-4" onSubmit={handleAddDevice}>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-white/30 font-bold uppercase px-1 tracking-widest">Asset Name</label>
+                  <input name="name" placeholder="e.g. Scania Tanker 01" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-blue-500" required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-white/30 font-bold uppercase px-1 tracking-widest">Device IMEI</label>
+                  <input name="imei" placeholder="15-digit IMEI number" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white font-mono focus:outline-none focus:border-blue-500" required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-white/30 font-bold uppercase px-1 tracking-widest">Plate Number</label>
+                  <input name="plateNumber" placeholder="e.g. T 456 XXX" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white font-mono focus:outline-none focus:border-blue-500" required />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-white/30 font-bold uppercase px-1 tracking-widest">Vehicle Type</label>
+                  <select name="vehicleType" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-blue-500 appearance-none">
+                    <option value="TRUCK">Heavy Truck / Trailer</option>
+                    <option value="CAR">Personal Car</option>
+                    <option value="VAN">Delivery Van</option>
+                    <option value="BUS">Passenger Bus</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-lg shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98] mt-4">
+                  Confirm Registration
+                </button>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="p-4 border-t border-white/5 bg-[#141414]">
+        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer group">
+          <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+            <User size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white truncate">Saveg Admin</p>
+            <p className="text-[10px] text-white/30 uppercase">Premium Member</p>
+          </div>
+          <LogOut className="text-white/20 group-hover:text-red-400 transition-colors" size={16} />
+        </div>
+      </div>
+    </aside>
+  );
+};
+
+// Main Layout
+export default function App() {
+  const { socket } = useTracking();
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const { setDevices } = useDeviceStore();
+
+  useEffect(() => {
+    setIsLoaded(true);
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsLoggedIn(true);
+      fetchDevices();
+    }
+  }, []);
+
+  const fetchDevices = async () => {
+    try {
+      const response = await fetch('/api/devices', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDevices(data);
+      }
+    } catch (error) {
+      console.error('Fetch devices error:', error);
+    }
+  };
+
+  const handleAuth = async (e: any) => {
+    e.preventDefault();
+    setAuthError(null);
+    const formData = new FormData(e.target);
+    const email = formData.get('email');
+    const password = formData.get('password');
+    const name = formData.get('name');
+    const tenantName = formData.get('tenantName');
+
+    const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
+    const body = isRegistering 
+      ? { email, password, name, tenantName } 
+      : { email, password };
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        if (isRegistering) {
+          setIsRegistering(false);
+          setAuthError("Account created! Please login.");
+        } else {
+          localStorage.setItem('token', data.token);
+          setIsLoggedIn(true);
+          fetchDevices();
+        }
+      } else {
+        setAuthError(data.error || "Authentication failed");
+      }
+    } catch (error) {
+      setAuthError("Server connection error. Check DATABASE_URL.");
+    }
+  };
+
+  const seedAdmin = async () => {
+    setAuthError("Provisioning admin...");
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: 'admin@fleetpulse.pro', 
+          password: 'password123', 
+          name: 'System Admin', 
+          tenantName: 'Fleet Management HQ' 
+        }),
+      });
+      if (response.ok) {
+        setAuthError("Admin created! Try to login now.");
+      } else {
+        const data = await response.json();
+        setAuthError(data.error || "Seed failed");
+      }
+    } catch (e) {
+      setAuthError("Check your DATABASE_URL in Secrets");
+    }
+  };
+
+  if (!isLoaded) return <div className="h-screen w-screen bg-[#141414]" />;
+
+  if (!isLoggedIn) {
+    return (
+      <div className="h-screen w-screen bg-[#141414] flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md bg-[#1a1a1a] border border-white/10 p-8 rounded-2xl shadow-2xl"
+        >
+          <div className="flex items-center gap-3 mb-8 justify-center">
+            <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
+              <Activity className="text-white" size={24} />
+            </div>
+            <h1 className="font-sans font-bold text-2xl text-white tracking-tight">FleetPulse<span className="text-blue-500">Pro</span></h1>
+          </div>
+          
+          <form className="space-y-4" onSubmit={handleAuth}>
+            {authError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] uppercase font-bold p-3 rounded text-center">
+                {authError}
+              </div>
+            )}
+
+            {isRegistering && (
+              <>
+                <div>
+                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1.5 px-1">Full Name</label>
+                  <input name="name" type="text" placeholder="John Doe" className="w-full bg-white/5 border border-white/10 rounded-lg py-3 px-4 text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 transition-colors" required />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1.5 px-1">Company Name</label>
+                  <input name="tenantName" type="text" placeholder="Transporters Ltd" className="w-full bg-white/5 border border-white/10 rounded-lg py-3 px-4 text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 transition-colors" required />
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1.5 px-1">Email Address</label>
+              <input 
+                name="email"
+                type="email" 
+                placeholder="admin@fleetpulse.com" 
+                className="w-full bg-white/5 border border-white/10 rounded-lg py-3 px-4 text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 transition-colors"
+                defaultValue={!isRegistering ? "admin@fleetpulse.pro" : ""}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1.5 px-1">Password</label>
+              <input 
+                name="password"
+                type="password" 
+                placeholder="••••••••" 
+                className="w-full bg-white/5 border border-white/10 rounded-lg py-3 px-4 text-white placeholder:text-white/20 focus:outline-none focus:border-blue-500 transition-colors"
+                defaultValue={!isRegistering ? "password123" : ""}
+                required
+              />
+            </div>
+            
+            <button 
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+            >
+              {isRegistering ? "Register Account" : "Access Platform"}
+            </button>
+          </form>
+
+          <div className="mt-4 flex flex-col gap-3">
+             <button 
+                onClick={() => setIsRegistering(!isRegistering)}
+                className="text-[10px] text-white/30 hover:text-white transition-colors uppercase font-bold tracking-widest text-center"
+              >
+                {isRegistering ? "Already have an account? Login" : "New? Create an account"}
+              </button>
+
+              {!isRegistering && (
+                <button 
+                  onClick={seedAdmin}
+                  className="bg-white/5 border border-white/10 text-[9px] text-blue-400 font-bold uppercase py-2 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  🚀 Setup First Admin (Seed)
+                </button>
+              )}
+          </div>
+          
+          <div className="mt-8 pt-6 border-t border-white/5 text-center">
+            <p className="text-xs text-white/30">Enterprise Fleet Management Solutions</p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen w-screen bg-[#141414] text-white font-sans flex overflow-hidden">
+      <Sidebar />
+      
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="h-16 border-bottom border-white/5 bg-[#1a1a1a] px-8 flex items-center justify-between z-10 shrink-0">
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-xs font-mono font-bold">SYSTEM STABLE</span>
+            </div>
+            
+            <div className="h-8 w-px bg-white/10" />
+            
+            <div className="flex items-center gap-6">
+              {[
+                { icon: Truck, label: 'TOTAL', value: useDeviceStore.getState().devices.length.toString() },
+                { icon: Gauge, label: 'ONLINE', value: useDeviceStore.getState().devices.filter(d => d.status !== 'OFFLINE').length.toString() },
+                { icon: Fuel, label: 'MILEAGE', value: '0 km' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <item.icon className="text-white/30" size={16} />
+                  <div>
+                    <p className="text-[8px] text-white/30 font-bold uppercase leading-none mb-0.5">{item.label}</p>
+                    <p className="text-xs font-mono font-bold leading-none">{item.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button className="p-2 text-white/50 hover:text-white transition-colors relative">
+              <Bell size={20} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-[#1a1a1a]" />
+            </button>
+            <div className="bg-yellow-500/10 text-yellow-500 px-3 py-1.5 rounded flex items-center gap-2 border border-yellow-500/20">
+              <span className="text-[10px] font-bold uppercase">Mi Coins</span>
+              <span className="font-mono font-bold text-xs">1,240.50</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <div className="flex-1 min-h-0 relative">
+          <LiveMap />
+        </div>
+      </main>
+
+      {/* Right Detail Panel (Optional/Contextual) */}
+      <AnimatePresence>
+        <motion.div 
+          initial={{ x: 350 }}
+          animate={{ x: 0 }}
+          className="w-[350px] h-full bg-[#1a1a1a] border-l border-white/5 flex flex-col"
+        >
+          <div className="p-6 border-bottom border-white/5">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-mono text-xs font-bold text-white/50 uppercase tracking-widest">Asset Details</h2>
+              <button className="text-white/30 hover:text-white shrink-0"><Filter size={14} /></button>
+            </div>
+            
+            <div className="bg-[#141414] p-4 rounded-lg border border-white/10 mb-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-blue-500/20 rounded flex items-center justify-center text-blue-400">
+                  <Truck size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-white">T 123 ABC</h3>
+                  <p className="text-xs text-white/30 uppercase">SinoTruck - 2022</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/5 p-2 rounded">
+                  <p className="text-[8px] text-white/30 uppercase mb-1">Status</p>
+                  <p className="text-xs text-green-400 font-bold uppercase">Moving</p>
+                </div>
+                <div className="bg-white/5 p-2 rounded">
+                  <p className="text-[8px] text-white/30 uppercase mb-1">Speed</p>
+                  <p className="text-xs text-white font-bold">64 km/h</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Real-time Data</p>
+              {[
+                { label: 'Coordinates', value: '-6.7924, 39.2083' },
+                { label: 'Address', value: 'Morogoro Rd, Dar es Salaam' },
+                { label: 'Today Distance', value: '142.5 km' },
+                { label: 'Engine', value: 'Started (ACC ON)', valueClass: 'text-green-500' },
+                { label: 'Voltage', value: '24.2V' },
+                { label: 'Last Update', value: '2s ago' },
+              ].map((item) => (
+                <div key={item.label} className="flex justify-between items-start gap-4">
+                  <span className="text-[10px] text-white/40 uppercase whitespace-nowrap">{item.label}</span>
+                  <span className={cn("text-[11px] text-right font-mono", item.valueClass || "text-white/80")}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="flex-1 p-6 overflow-y-auto">
+             <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-4">Recent Events</p>
+             <div className="space-y-3">
+               {[
+                 { type: 'Overspeed', time: '14:20', desc: 'Exceeded 80km/h' },
+                 { type: 'Geofence', time: '13:45', desc: 'Entered Dar Port' },
+                 { type: 'ACC ON', time: '12:10', desc: 'Engine Started' },
+               ].map((event, i) => (
+                 <div key={i} className="flex gap-3 relative">
+                   <div className="w-px h-full bg-white/10 absolute left-1.5 top-2" />
+                   <div className="w-3 h-3 rounded-full bg-blue-500 shrink-0 mt-1 z-10" />
+                   <div className="pb-4">
+                     <p className="text-[11px] font-bold text-white flex items-center gap-2">
+                       {event.type} <span className="font-mono text-white/30 font-normal">{event.time}</span>
+                     </p>
+                     <p className="text-[10px] text-white/50">{event.desc}</p>
+                   </div>
+                 </div>
+               ))}
+             </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
