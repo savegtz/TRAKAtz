@@ -191,7 +191,16 @@ const Sidebar = () => {
             </button>
           </div>
           {devices.map((device) => (
-            <button key={device.id} className="w-full text-left px-3 py-2 text-xs text-white/40 hover:text-white hover:bg-white/5 rounded transition-colors flex items-center justify-between group">
+            <button 
+              key={device.id} 
+              onClick={() => useDeviceStore.getState().selectDevice(device.id)}
+              className={cn(
+                "w-full text-left px-3 py-2 text-xs rounded transition-colors flex items-center justify-between group",
+                useDeviceStore.getState().selectedDeviceId === device.id 
+                  ? "bg-blue-600/20 text-blue-400 border border-blue-600/20" 
+                  : "text-white/40 hover:text-white hover:bg-white/5"
+              )}
+            >
               <div className="flex items-center gap-2">
                 <div className={cn("w-1.5 h-1.5 rounded-full", 
                   device.status === 'MOVING' ? 'bg-green-500' : 
@@ -199,7 +208,7 @@ const Sidebar = () => {
                 />
                 <span className="font-mono">{device.plateNumber}</span>
               </div>
-              <span className="text-[9px] text-white/20 group-hover:text-white/40">{device.status}</span>
+              <span className="text-[9px] text-white/20 group-hover:text-white/40 uppercase font-bold">{device.status}</span>
             </button>
           ))}
           {devices.length === 0 && (
@@ -285,8 +294,10 @@ export default function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const { setDevices } = useDeviceStore();
+  const { devices, selectedDeviceId, selectDevice, setDevices } = useDeviceStore();
+  const selectedDevice = devices.find(d => d.id === selectedDeviceId);
 
   useEffect(() => {
     setIsLoaded(true);
@@ -299,7 +310,7 @@ export default function App() {
 
   const fetchDevices = async () => {
     try {
-      const response = await fetch('/api/devices', {
+      const response = await fetch(`/api/devices?t=${Date.now()}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
@@ -486,9 +497,9 @@ export default function App() {
             
             <div className="flex items-center gap-6">
               {[
-                { icon: Truck, label: 'TOTAL', value: useDeviceStore.getState().devices.length.toString() },
-                { icon: Gauge, label: 'ONLINE', value: useDeviceStore.getState().devices.filter(d => d.status !== 'OFFLINE').length.toString() },
-                { icon: Fuel, label: 'MILEAGE', value: '0 km' },
+                { icon: Truck, label: 'TOTAL', value: devices.length.toString() },
+                { icon: Gauge, label: 'ONLINE', value: devices.filter(d => d.status !== 'OFFLINE').length.toString() },
+                { icon: Fuel, label: 'MOVING', value: devices.filter(d => d.status === 'MOVING').length.toString() },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-2">
                   <item.icon className="text-white/30" size={16} />
@@ -519,82 +530,166 @@ export default function App() {
         </div>
       </main>
 
-      {/* Right Detail Panel (Optional/Contextual) */}
+      {/* Right Detail Panel */}
       <AnimatePresence>
-        <motion.div 
-          initial={{ x: 350 }}
-          animate={{ x: 0 }}
-          className="w-[350px] h-full bg-[#1a1a1a] border-l border-white/5 flex flex-col"
-        >
-          <div className="p-6 border-bottom border-white/5">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-mono text-xs font-bold text-white/50 uppercase tracking-widest">Asset Details</h2>
-              <button className="text-white/30 hover:text-white shrink-0"><Filter size={14} /></button>
-            </div>
-            
-            <div className="bg-[#141414] p-4 rounded-lg border border-white/10 mb-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-12 h-12 bg-blue-500/20 rounded flex items-center justify-center text-blue-400">
-                  <Truck size={24} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg text-white">T 123 ABC</h3>
-                  <p className="text-xs text-white/30 uppercase">SinoTruck - 2022</p>
-                </div>
+        {selectedDevice && (
+          <motion.div 
+            initial={{ x: 350 }}
+            animate={{ x: 0 }}
+            exit={{ x: 350 }}
+            className="w-[350px] h-full bg-[#1a1a1a] border-l border-white/5 flex flex-col"
+          >
+            <div className="p-6 border-bottom border-white/5">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="font-mono text-xs font-bold text-white/50 uppercase tracking-widest">Asset Details</h2>
+                <button onClick={() => selectDevice(null)} className="text-white/30 hover:text-white shrink-0">✕</button>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/5 p-2 rounded">
-                  <p className="text-[8px] text-white/30 uppercase mb-1">Status</p>
-                  <p className="text-xs text-green-400 font-bold uppercase">Moving</p>
+              <div className="bg-[#141414] p-4 rounded-lg border border-white/10 mb-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-blue-500/20 rounded flex items-center justify-center text-blue-400">
+                    <Truck size={24} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-lg text-white truncate">{selectedDevice.plateNumber}</h3>
+                    <p className="text-xs text-white/30 uppercase truncate">{selectedDevice.name}</p>
+                  </div>
                 </div>
-                <div className="bg-white/5 p-2 rounded">
-                  <p className="text-[8px] text-white/30 uppercase mb-1">Speed</p>
-                  <p className="text-xs text-white font-bold">64 km/h</p>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 p-2 rounded">
+                    <p className="text-[8px] text-white/30 uppercase mb-1">Status</p>
+                    <p className={cn("text-xs font-bold uppercase", 
+                      selectedDevice.status === 'MOVING' ? 'text-green-400' : 
+                      selectedDevice.status === 'IDLE' ? 'text-yellow-400' : 'text-red-400'
+                    )}>
+                      {selectedDevice.status}
+                    </p>
+                  </div>
+                  <div className="bg-white/5 p-2 rounded">
+                    <p className="text-[8px] text-white/30 uppercase mb-1">Speed</p>
+                    <p className="text-xs text-white font-bold">{selectedDevice.lastPosition?.speed.toFixed(0) || 0} km/h</p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-4">
-              <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Real-time Data</p>
-              {[
-                { label: 'Coordinates', value: '-6.7924, 39.2083' },
-                { label: 'Address', value: 'Morogoro Rd, Dar es Salaam' },
-                { label: 'Today Distance', value: '142.5 km' },
-                { label: 'Engine', value: 'Started (ACC ON)', valueClass: 'text-green-500' },
-                { label: 'Voltage', value: '24.2V' },
-                { label: 'Last Update', value: '2s ago' },
-              ].map((item) => (
-                <div key={item.label} className="flex justify-between items-start gap-4">
-                  <span className="text-[10px] text-white/40 uppercase whitespace-nowrap">{item.label}</span>
-                  <span className={cn("text-[11px] text-right font-mono", item.valueClass || "text-white/80")}>{item.value}</span>
-                </div>
-              ))}
+              <div className="space-y-4">
+                <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Real-time Data</p>
+                {[
+                  { label: 'IMEI', value: selectedDevice.imei },
+                  { label: 'Coordinates', value: selectedDevice.lastPosition ? `${selectedDevice.lastPosition.lat.toFixed(4)}, ${selectedDevice.lastPosition.lng.toFixed(4)}` : 'N/A' },
+                  { label: 'Engine', value: selectedDevice.status !== 'OFFLINE' ? 'ACC ON' : 'ACC OFF', valueClass: selectedDevice.status !== 'OFFLINE' ? 'text-green-500' : 'text-red-500' },
+                  { label: 'Last Update', value: selectedDevice.lastPosition ? new Date(selectedDevice.lastPosition.timestamp).toLocaleTimeString() : 'Never' },
+                  { label: 'Voltage', value: '24.1V' },
+                ].map((item) => (
+                  <div key={item.label} className="flex justify-between items-start gap-4">
+                    <span className="text-[10px] text-white/40 uppercase whitespace-nowrap">{item.label}</span>
+                    <span className={cn("text-[11px] text-right font-mono", item.valueClass || "text-white/80")}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          
-          <div className="flex-1 p-6 overflow-y-auto">
-             <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-4">Recent Events</p>
-             <div className="space-y-3">
-               {[
-                 { type: 'Overspeed', time: '14:20', desc: 'Exceeded 80km/h' },
-                 { type: 'Geofence', time: '13:45', desc: 'Entered Dar Port' },
-                 { type: 'ACC ON', time: '12:10', desc: 'Engine Started' },
-               ].map((event, i) => (
-                 <div key={i} className="flex gap-3 relative">
-                   <div className="w-px h-full bg-white/10 absolute left-1.5 top-2" />
-                   <div className="w-3 h-3 rounded-full bg-blue-500 shrink-0 mt-1 z-10" />
-                   <div className="pb-4">
-                     <p className="text-[11px] font-bold text-white flex items-center gap-2">
-                       {event.type} <span className="font-mono text-white/30 font-normal">{event.time}</span>
-                     </p>
-                     <p className="text-[10px] text-white/50">{event.desc}</p>
-                   </div>
-                 </div>
-               ))}
-             </div>
-          </div>
-        </motion.div>
+            
+            <div className="flex-1 p-6 overflow-y-auto">
+               <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-4">Device Commands</p>
+               <div className="grid grid-cols-2 gap-2">
+                 <button 
+                  onClick={async () => {
+                    const res = await fetch('/api/commands', {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                      },
+                      body: JSON.stringify({ deviceId: selectedDevice.id, type: 'CUT_FUEL' }),
+                    });
+                    if (res.ok) alert("Command 'Cut Fuel' has been sent successfully!");
+                  }}
+                  className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-bold p-2 px-3 rounded uppercase hover:bg-red-500/20 transition-all active:scale-95"
+                 >
+                    Cut Fuel
+                 </button>
+                 <button 
+                  onClick={async () => {
+                    const res = await fetch('/api/commands', {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                      },
+                      body: JSON.stringify({ deviceId: selectedDevice.id, type: 'RESTORE_FUEL' }),
+                    });
+                    if (res.ok) alert("Command 'Restore Fuel' has been sent successfully!");
+                  }}
+                  className="bg-green-500/10 border border-green-500/20 text-green-500 text-[10px] font-bold p-2 px-3 rounded uppercase hover:bg-green-500/20 transition-all active:scale-95"
+                 >
+                    Restore Fuel
+                 </button>
+                 <button 
+                  className="bg-white/5 border border-white/10 text-white/50 text-[10px] font-bold p-2 px-3 rounded uppercase hover:bg-white/10 transition-all col-span-2"
+                 >
+                    Reboot Device
+                 </button>
+               </div>
+
+               <div className="mt-8 pt-6 border-t border-white/5">
+                 <button 
+                  disabled={isDeleting}
+                  onClick={async () => {
+                    const deviceId = selectedDevice.id;
+                    const plate = selectedDevice.plateNumber;
+                    
+                    if (window.confirm(`Futa kifaa ${plate} kabisa? Kitendo hiki hakiwezi kubatilishwa.`)) {
+                      setIsDeleting(true);
+                      console.log("Trace: Attempting to delete device:", deviceId);
+                      
+                      try {
+                        const token = localStorage.getItem('token');
+                        const response = await fetch(`/api/devices/${deviceId}`, {
+                          method: 'DELETE',
+                          headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                          }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                          console.log("Trace: Delete success:", data);
+                          // Clear selection first to hide the panel
+                          selectDevice(null);
+                          // Immediately update the local store list to reflect change without waiting for fetch
+                          const updatedDevices = devices.filter(d => d.id !== deviceId);
+                          setDevices(updatedDevices);
+                          
+                          // Then fetch fresh list just in case
+                          await fetchDevices();
+                          alert("Kifaa kimefutwa kikamilifu.");
+                        } else {
+                          console.error("Trace: Delete failed:", data);
+                          alert(`Hitilafu: ${data.error || "Imeshindwa kufuta"}`);
+                        }
+                      } catch (error) {
+                        console.error("Trace: Network error during delete:", error);
+                        alert("Hitilafu ya mtandao: Imeshindwa kuwasiliana na seva.");
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }
+                  }}
+                  className={cn(
+                    "w-full bg-red-600 border border-red-700 text-white text-[10px] font-bold py-3.5 rounded uppercase hover:bg-red-700 transition-all shadow-lg active:scale-95",
+                    isDeleting && "opacity-50 cursor-not-allowed animate-pulse"
+                  )}
+                 >
+                    {isDeleting ? "INAFUTA..." : "FUTA ASSET KABISA - PERMANENT"}
+                 </button>
+
+               </div>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );

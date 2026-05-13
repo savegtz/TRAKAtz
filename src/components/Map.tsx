@@ -53,6 +53,11 @@ export const Map = () => {
           <Marker 
             key={device.id} 
             position={[device.lastPosition.lat, device.lastPosition.lng]}
+            eventHandlers={{
+              click: () => {
+                useDeviceStore.getState().selectDevice(device.id);
+              },
+            }}
           >
             <Popup>
               <div className="p-2">

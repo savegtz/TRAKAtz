@@ -139,6 +139,32 @@ async function startServer() {
     }
   });
 
+  app.delete("/api/devices/:id", authenticateToken, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      console.log(`Trace: Deleting device ${id} for tenant ${req.user.tenantId}`);
+      
+      const device = await prisma.device.findFirst({
+        where: { id, tenantId: req.user.tenantId }
+      });
+
+      if (!device) {
+        console.warn(`Trace: Device ${id} not found or not owned by tenant ${req.user.tenantId}`);
+        return res.status(404).json({ error: "Kifaa hakijapatikana au huna mamlaka." });
+      }
+
+      await prisma.device.delete({
+        where: { id }
+      });
+
+      console.log(`Trace: Device ${id} deleted successfully`);
+      res.json({ message: "Kifaa kimefutwa." });
+    } catch (error: any) {
+      console.error("Trace: Delete Error:", error);
+      res.status(500).json({ error: "Seva imeshindwa kufuta kifaa. Huenda kuna data zimefungwa.", detail: error.message });
+    }
+  });
+
   // --- GPS INGESTION ---
   app.post("/api/gps/ingest", async (req, res) => {
     const gpsSchema = z.object({
@@ -167,7 +193,7 @@ async function startServer() {
         lastSpeed: speed,
         lastHeading: heading,
         lastSeen: new Date(),
-        status: speed > 5 ? "MOVING" : (speed === 0 ? "IDLE" : "OFFLINE")
+        status: (speed > 5 ? "MOVING" : (speed === 0 ? "IDLE" : "OFFLINE")) as any
       };
 
       await prisma.device.update({
@@ -192,6 +218,39 @@ async function startServer() {
     } catch (error) {
       console.error("Ingest Error:", error);
       res.status(500).json({ error: "Ingestion failed" });
+    }
+  });
+
+  // --- COMMANDS ---
+  app.post("/api/commands", authenticateToken, async (req: any, res) => {
+    try {
+      const { deviceId, type, payload } = req.body;
+      
+      const command = await prisma.command.create({
+        data: {
+          deviceId,
+          type,
+          payload: payload || {},
+          status: "PENDING"
+        }
+      });
+
+      // In a real system, you would send this to the tracker via GPRS/SMS
+      // For demo, we just simulate success after 2 seconds
+      setTimeout(async () => {
+        await prisma.command.update({
+          where: { id: command.id },
+          data: { 
+            status: "EXECUTED",
+            executedAt: new Date()
+          }
+        });
+        io.emit("command:executed", { deviceId, type, commandId: command.id });
+      }, 2000);
+
+      res.status(202).json({ message: "Command queued", commandId: command.id });
+    } catch (error) {
+      res.status(500).json({ error: "Command failed" });
     }
   });
 

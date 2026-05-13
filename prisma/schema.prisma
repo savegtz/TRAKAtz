@@ -70,6 +70,7 @@ model Device {
   positions       Position[]
   alerts          Alert[]
   commands        Command[]
+  trips           Trip[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
@@ -91,7 +92,7 @@ model Vehicle {
   color         String?
   photoUrl      String?
   deviceId      String   @unique
-  device        Device   @relation(fields: [deviceId], references: [id])
+  device        Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   driverId      String?  @unique
   driver        Driver?  @relation(fields: [driverId], references: [id])
   createdAt     DateTime @default(now())
@@ -111,7 +112,7 @@ model DeviceGroup {
 model Position {
   id        String   @id @default(uuid())
   deviceId  String
-  device    Device   @relation(fields: [deviceId], references: [id])
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   lat       Float
   lng       Float
   speed     Float
@@ -127,6 +128,7 @@ model Position {
 model Trip {
   id            String   @id @default(uuid())
   deviceId      String
+  device        Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   startTime     DateTime
   endTime       DateTime?
   startLat      Float
@@ -146,7 +148,7 @@ model Alert {
   severity    String   @default("INFO")
   isRead      Boolean  @default(false)
   deviceId    String
-  device      Device   @relation(fields: [deviceId], references: [id])
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   lat         Float?
   lng         Float?
   timestamp   DateTime @default(now())
@@ -182,7 +184,7 @@ model Command {
   payload     Json?
   status      String   @default("PENDING") // PENDING, SENT, EXECUTED, FAILED
   deviceId    String
-  device      Device   @relation(fields: [deviceId], references: [id])
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   sentAt      DateTime?
   executedAt  DateTime?
   createdAt   DateTime @default(now())
